@@ -99,6 +99,22 @@
   nav button { flex: 1; min-height: 56px; border: 0; background: none; color: var(--doux); font-size: 13px; }
   nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
   section[hidden], [hidden] { display: none !important; }
+  .graphes h2 { margin-top: 14px; }
+  #resume table { font-size: 13px; }
+  #resume th, #resume td { padding: 5px 3px; }
+  @media print {
+    :root { --fond: #fff; --carte: #fff; --texte: #000; --doux: #555; --accent: #2f5f9a; --trait: #ccc; --alerte: #a06a00; }
+    @page { size: letter; margin: 12mm; }
+    body { padding: 0; max-width: none; font-size: 11pt; background: #fff; }
+    header, nav, .non-imprime { display: none !important; }
+    #resume h1 { font-size: 18pt; margin: 0 0 4px; }
+    #resume h2 { font-size: 12pt; margin: 10px 0 4px; }
+    #resume table { font-size: 9pt; }
+    #resume th, #resume td { padding: 2px 3px; }
+    .graphes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .graphes svg { max-height: 55mm; }
+    .legende { font-size: 8pt; }
+  }
 </style>
 </head>
 <body>
@@ -158,9 +174,23 @@
     <button class="secondaire" id="regImportBtn">Importer (JSON)</button>
     <input type="file" id="regImport" accept="application/json,.json" hidden>
 
+    <h2>Médecin</h2>
+    <button class="secondaire" id="regResume">Résumé pour le médecin</button>
+
+    <h2>Démonstration</h2>
+    <button class="secondaire" id="regDemo">Charger 14 jours de démonstration</button>
+    <p class="doux petit">Tes données sont mises de côté et reviennent en quittant la démo.</p>
+
     <h2>Réinitialiser</h2>
     <button class="secondaire" id="regReset">Tout effacer sur ce téléphone</button>
     <p class="doux petit">Le Google Sheet n'est pas touché.</p>
+  </section>
+  <section id="resume" hidden>
+    <div class="boutons non-imprime">
+      <button class="principal" id="resumeImprimer">Imprimer ou enregistrer en PDF</button>
+      <button class="secondaire" id="resumeRetour">Retour</button>
+    </div>
+    <div id="resumeContenu"></div>
   </section>
 </main>
 
@@ -173,7 +203,7 @@
 </nav>
 
 <script>
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CLE = 'palier.etat';
 const $ = id => document.getElementById(id);
 
@@ -356,6 +386,7 @@ document.addEventListener('click', e => {
 // ---------- Envoi au Google Sheet ----------
 let envoiEnCours = false, derniereErreur = '';
 function enFile(onglet, id, valeurs) {
+  if (etat.demo) return;  // la démo n'écrit jamais dans le Google Sheet
   etat.file = etat.file.filter(x => x.id !== id);
   etat.file.push({ onglet, id, valeurs });
   sauver();
@@ -396,7 +427,7 @@ function afficher(ecran) {
   });
   if (ecran !== ecranActuelPrec) { palierChoisi = null; semVue = null; scrollTo(0, 0); }
   ecranActuelPrec = ecran;
-  ({ depart: rendreDepart, soir: rendreSoir, matin: rendreMatin, semaine: rendreSemaine, plan: rendrePlan, reglages: rendreReglages }[ecran] || (() => {}))();
+  ({ depart: rendreDepart, soir: rendreSoir, matin: rendreMatin, semaine: rendreSemaine, plan: rendrePlan, resume: rendreResume, reglages: rendreReglages }[ecran] || (() => {}))();
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => afficher(b.dataset.ecran));
 const ecranParDefaut = () => new Date().getHours() < 12 ? 'matin' : 'soir';
@@ -587,6 +618,7 @@ function rendreSemaine() {
   const avecDose = st.matins.filter(m => m && m.doseTaken > 0).length;
   h += `<div class="carte petit">Nuits avec dose : <strong>${avecDose}</strong> sur ${c.palier.nightsPerWeek} permises · écarts : <strong>${st.ecarts}</strong><br>` +
        `Moyennes : brouillard <strong>${st.brouillard == null ? '-' : fmt1(st.brouillard)}</strong>, sommeil <strong>${st.sommeil == null ? '-' : fmt1(st.sommeil)}</strong> (${pluriel(st.nbSaisis, 'matin')} saisi${st.nbSaisis > 1 ? 's' : ''})</div>`;
+  h += `<h2>30 dernières nuits</h2><div class="carte">${courbe(soirCourant(), 30)}</div>`;
   z.innerHTML = h;
   $('semPrec').onclick = () => { semVue = w - 1; rendreSemaine(); };
   $('semSuiv').onclick = () => { semVue = w + 1; rendreSemaine(); };
@@ -738,12 +770,120 @@ $('regReset').onclick = () => {
   if (!confirm('Effacer le plan et tout le journal de ce téléphone ?')) return;
   if (!confirm('Vraiment ? Pense à exporter avant.')) return;
   localStorage.removeItem(CLE);
+  localStorage.removeItem(CLE_DEMO);
   etat = charger();
+  majReseau();
   afficher('depart');
 };
 
+// ---------- Tendances : brouillard et sommeil sur les nuits avant « fin », nuits avec dose en fond ----------
+function courbe(fin, nb) {
+  const W = 320, H = 150, g = 22, b = 18, hh = 8, dx = (W - g) / nb;
+  const nuits = [...Array(nb)].map((_, i) => ajouter(fin, i - nb));
+  const y = v => H - b - v / 10 * (H - b - hh);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Brouillard et sommeil, ${nb} nuits">`;
+  nuits.forEach((n, i) => {
+    if (doseNuit(n) > 0) s += `<rect x="${g + i * dx}" y="${hh}" width="${dx}" height="${H - b - hh}" fill="${estEcart(n) ? 'var(--alerte)' : 'var(--accent)'}" opacity=".18"/>`;
+  });
+  for (const v of [0, 5, 10]) s += `<line x1="${g}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--trait)"/><text x="4" y="${y(v) + 3}">${v}</text>`;
+  for (const [cle, coul] of [['fog', 'var(--doux)'], ['sleepQuality', 'var(--accent)']]) {
+    let d = '', ouvert = false;
+    nuits.forEach((n, i) => {
+      const m = etat.jours[ajouter(n, 1)]?.morning;
+      if (!m) { ouvert = false; return; }
+      const x = g + i * dx + dx / 2;
+      d += `${ouvert ? 'L' : 'M'}${x.toFixed(1)} ${y(m[cle]).toFixed(1)}`;
+      ouvert = true;
+      s += `<circle cx="${x.toFixed(1)}" cy="${y(m[cle]).toFixed(1)}" r="1.8" fill="${coul}"/>`;
+    });
+    if (d) s += `<path d="${d}" fill="none" stroke="${coul}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  s += `<text x="${g}" y="${H - 4}">${court(nuits[0])}</text><text x="${W}" y="${H - 4}" text-anchor="end">${court(nuits[nb - 1])}</text>`;
+  return s + `</svg><div class="legende"><span><span class="b b-fog"></span>brouillard</span><span><span class="b b-sleep"></span>sommeil</span>` +
+             `<span><span class="b" style="background:var(--accent);opacity:.35"></span>nuit avec dose</span><span><span class="b" style="background:var(--alerte);opacity:.5"></span>écart</span></div>`;
+}
+
+// ---------- Résumé pour le médecin (une page imprimable) ----------
+function rendreResume() {
+  const z = $('resumeContenu'), cs = situer(soirCourant()), total = totalSemaines();
+  if (cs.avant) { z.innerHTML = '<p>Le plan n\'a pas encore commencé.</p>'; return; }
+  const derniere = Math.min(cs.semPlan, total - 1);
+  let lignes = '', ecartsTotal = 0;
+  for (let w = 0; w <= derniere; w++) {
+    const st = statsSemaine(w), p = situer(st.debut).palier;
+    const avec = st.matins.filter(m => m && m.doseTaken > 0).length;
+    const pris = st.matins.reduce((a, m) => a + (m ? m.doseTaken : 0), 0);
+    ecartsTotal += st.ecarts;
+    lignes += `<tr><td>${w + 1}</td><td>${p.label}</td><td>${avec} / ${p.nightsPerWeek}</td><td>${String(+pris.toFixed(3)).replace('.', ',')} / ${String(+(p.doseMg * p.nightsPerWeek).toFixed(3)).replace('.', ',')}</td>` +
+              `<td>${st.ecarts}</td><td>${st.brouillard == null ? '-' : fmt1(st.brouillard)}</td><td>${st.sommeil == null ? '-' : fmt1(st.sommeil)}</td><td>${st.nbSaisis}/7</td></tr>`;
+  }
+  const tous = [];
+  for (let n = etat.plan.startDate; n < soirCourant(); n = ajouter(n, 1)) { const m = etat.jours[ajouter(n, 1)]?.morning; if (m) tous.push(m); }
+  const recents = [];
+  for (let i = 7; i >= 1; i--) { const m = etat.jours[ajouter(soirCourant(), 1 - i)]?.morning; if (m) recents.push(m); }
+  const moy = (l, k) => { const v = moyenne(l.map(m => m[k])); return v == null ? '-' : fmt1(v); };
+  const tardives = tous.filter(m => m.doseTaken > 0 && estTardive(m.doseTime)).length;
+  z.innerHTML =
+    `<h1>Résumé pour le médecin</h1>` +
+    `<p class="doux">Plan commencé le ${joli(etat.plan.startDate)} · ${cs.fini ? 'plan terminé' : `semaine ${cs.semPlan + 1} sur ${total}, palier ${cs.palier.label}`} · généré le ${joli(aujourdhui())}</p>` +
+    `<h2>Plan</h2>${tablePlan(etat.plan.paliers, cs.fini ? null : cs.palier.id)}` +
+    `<h2>Adhérence par semaine</h2><table><tr><th>Sem.</th><th>Palier</th><th>Nuits avec dose / permises</th><th>mg pris / prévus</th><th>Écarts</th><th>Brouillard</th><th>Sommeil</th><th>Journal</th></tr>${lignes}</table>` +
+    `<h2>Synthèse</h2><ul class="conseils">` +
+    `<li>${pluriel(tous.length, 'matin')} saisi${tous.length > 1 ? 's' : ''}, ${pluriel(ecartsTotal, 'écart')} au total, ${pluriel(tardives, 'prise')} après 1 h du matin.</li>` +
+    `<li>Brouillard moyen (0 à 10) : ${moy(tous, 'fog')} sur la période, ${moy(recents, 'fog')} sur les 7 dernières nuits.</li>` +
+    `<li>Qualité du sommeil moyenne (0 à 10) : ${moy(tous, 'sleepQuality')} sur la période, ${moy(recents, 'sleepQuality')} sur les 7 dernières nuits.</li>` +
+    `<li>Réveils moyens par nuit : ${moy(tous, 'awakenings')}.</li></ul>` +
+    `<div class="graphes"><div><h2>mg par semaine</h2>${graphique(total, cs)}</div><div><h2>30 dernières nuits</h2>${courbe(soirCourant(), 30)}</div></div>`;
+}
+$('resumeImprimer').onclick = () => window.print();
+$('resumeRetour').onclick = () => afficher('reglages');
+$('regResume').onclick = () => afficher('resume');
+
+// ---------- Démonstration : 14 jours fictifs, données réelles mises de côté ----------
+const CLE_DEMO = 'palier.avantDemo';
+function genererDemo() {
+  const auj = aujourdhui(), debut = ajouter(auj, -17);
+  const jours = {};
+  // Graine fixe : la démo est toujours la même
+  let g = 7; const alea = () => (g = (g * 9301 + 49297) % 233280) / 233280;
+  const doses = [3.75, 3.75, 0, 3.75, 3.75, 3.75, 0, 3.75, 0, 3.75, 7.5, 3.75, 0, 3.75];
+  for (let i = 0; i < 14; i++) {
+    const nuit = ajouter(auj, i - 14), matin = ajouter(nuit, 1), d = doses[i];
+    const sansDose = d === 0;
+    jours[nuit] = jours[nuit] || { date: nuit };
+    jours[nuit].evening = { scenario: sansDose ? 'risk' : 'sleep', recommendedDoseMg: d, decidedAt: `${nuit}T21:30:00` };
+    jours[matin] = jours[matin] || { date: matin };
+    jours[matin].morning = {
+      fog: Math.max(0, Math.min(10, Math.round(4 + (sansDose ? 2 : 0) + alea() * 2 - i * 0.1))),
+      sleepQuality: Math.max(0, Math.min(10, Math.round(6 - (sansDose ? 2.5 : 0) + alea() * 2))),
+      awakenings: Math.round(1 + (sansDose ? 2 : 0) + alea()),
+      doseTaken: d,
+      ...(d > 0 ? { doseTime: i === 9 ? '02:15' : '22:30' } : {}),
+    };
+  }
+  return { plan: { startDate: debut, paliers: structuredClone(PLAN_DEFAUT) }, jours, decisions: {}, cfg: { url: '' }, file: [], demo: true };
+}
+$('regDemo').onclick = () => {
+  if (etat.demo) {
+    if (!confirm('Quitter la démonstration et retrouver tes données ?')) return;
+    let avant = null; try { avant = JSON.parse(localStorage.getItem(CLE_DEMO)); } catch {}
+    etat = avant || { plan: null, jours: {}, cfg: { url: '' }, file: [] };
+    try { localStorage.removeItem(CLE_DEMO); } catch {}
+  } else {
+    if (!confirm('Charger 14 jours de démonstration ? Tes données sont mises de côté et reviennent en quittant la démo. Rien n\'est envoyé au Google Sheet pendant la démo.')) return;
+    try { localStorage.setItem(CLE_DEMO, JSON.stringify(etat)); } catch { alert('Mise de côté impossible, démo annulée.'); return; }
+    etat = genererDemo();
+  }
+  sauver();
+  majReseau();
+  afficher(etat.plan ? 'semaine' : 'depart');
+};
+
 // ---------- Démarrage ----------
-function majReseau() { $('reseau').textContent = navigator.onLine ? 'En ligne' : 'Hors ligne'; }
+function majReseau() {
+  $('reseau').textContent = (etat.demo ? 'Démo · ' : '') + (navigator.onLine ? 'En ligne' : 'Hors ligne');
+  $('regDemo').textContent = etat.demo ? 'Quitter la démonstration' : 'Charger 14 jours de démonstration';
+}
 addEventListener('online', () => { majReseau(); envoyer(); });
 addEventListener('offline', majReseau);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { envoyer(); if (ecranActuel) afficher(ecranActuel); } });
