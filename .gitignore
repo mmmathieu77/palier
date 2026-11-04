@@ -1,0 +1,6 @@
+# Dépôt public : seul le code de l'app est publié. Documents de travail exclus.
+/*
+!/app/
+!/.gitignore
+!/README.md
+.DS_Store

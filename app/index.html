@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Palier</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Palier">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14171c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root { --fond: #14171c; --carte: #1e232b; --texte: #eef1f5; --doux: #8b95a5; --accent: #9fb8d9; --trait: #2c333e; }
+  @media (prefers-color-scheme: light) {
+    :root { --fond: #f2f4f7; --carte: #ffffff; --texte: #1a1e25; --doux: #5f6878; --accent: #3f6ea8; --trait: #dde2e9; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--fond); color: var(--texte);
+    font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: calc(env(safe-area-inset-top) + 12px) 20px calc(env(safe-area-inset-bottom) + 84px);
+    max-width: 520px; margin: 0 auto;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; color: var(--doux); font-size: 14px; }
+  h1 { font-size: 28px; margin: 16px 0 12px; }
+  .carte { background: var(--carte); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  .doux { color: var(--doux); }
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+    background: var(--carte); border-top: 1px solid var(--trait);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button {
+    flex: 1; min-height: 56px; border: 0; background: none; color: var(--doux);
+    font: inherit; font-size: 13px;
+  }
+  nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+  section[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <span id="reseau">…</span>
+  <span id="version"></span>
+</header>
+
+<main>
+  <section id="soir">
+    <h1>Ce soir</h1>
+    <div class="carte doux">Les deux scénarios arriveront ici (tranche 2).</div>
+  </section>
+  <section id="matin" hidden>
+    <h1>Ce matin</h1>
+    <div class="carte doux">Le journal du matin arrivera ici (tranche 2).</div>
+  </section>
+  <section id="semaine" hidden>
+    <h1>Semaine</h1>
+    <div class="carte doux">Vue de la semaine (tranche 3).</div>
+  </section>
+  <section id="plan" hidden>
+    <h1>Plan</h1>
+    <div class="carte doux">Liste des paliers (tranche 3).</div>
+  </section>
+  <section id="reglages" hidden>
+    <h1>Réglages</h1>
+    <div class="carte doux">Date de début, adresse du Google Sheet, export (tranche 2).</div>
+  </section>
+</main>
+
+<nav>
+  <button data-ecran="soir">Ce soir</button>
+  <button data-ecran="matin">Ce matin</button>
+  <button data-ecran="semaine">Semaine</button>
+  <button data-ecran="plan">Plan</button>
+  <button data-ecran="reglages">Réglages</button>
+</nav>
+
+<script>
+const VERSION = 'v1';
+const $ = id => document.getElementById(id);
+
+function afficher(ecran) {
+  document.querySelectorAll('main section').forEach(s => s.hidden = s.id !== ecran);
+  document.querySelectorAll('nav button').forEach(b => {
+    if (b.dataset.ecran === ecran) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => afficher(b.dataset.ecran));
+
+// Écran par défaut : Ce matin avant midi, Ce soir ensuite
+afficher(new Date().getHours() < 12 ? 'matin' : 'soir');
+
+function majReseau() { $('reseau').textContent = navigator.onLine ? 'En ligne' : 'Hors ligne'; }
+addEventListener('online', majReseau); addEventListener('offline', majReseau); majReseau();
+$('version').textContent = VERSION;
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
