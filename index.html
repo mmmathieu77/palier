@@ -14,9 +14,9 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <style>
-  :root { --fond: #14171c; --carte: #1e232b; --texte: #eef1f5; --doux: #8b95a5; --accent: #9fb8d9; --trait: #2c333e; }
+  :root { --fond: #14171c; --carte: #1e232b; --texte: #eef1f5; --doux: #8b95a5; --accent: #9fb8d9; --trait: #2c333e; --alerte: #e0b060; }
   @media (prefers-color-scheme: light) {
-    :root { --fond: #f2f4f7; --carte: #ffffff; --texte: #1a1e25; --doux: #5f6878; --accent: #3f6ea8; --trait: #dde2e9; }
+    :root { --fond: #f2f4f7; --carte: #ffffff; --texte: #1a1e25; --doux: #5f6878; --accent: #3f6ea8; --trait: #dde2e9; --alerte: #9a6a00; }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; min-height: 100%; }
@@ -27,20 +27,51 @@
     max-width: 520px; margin: 0 auto;
   }
   header { display: flex; justify-content: space-between; align-items: baseline; color: var(--doux); font-size: 14px; }
-  h1 { font-size: 28px; margin: 16px 0 12px; }
-  .carte { background: var(--carte); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  h1 { font-size: 28px; margin: 16px 0 4px; }
+  h2 { font-size: 17px; margin: 20px 0 8px; }
+  p { margin: 6px 0; }
   .doux { color: var(--doux); }
+  .petit { font-size: 14px; }
+  .alerte { color: var(--alerte); }
+  .carte { background: var(--carte); border-radius: 16px; padding: 16px; margin: 12px 0; }
+  button, input, select { font: inherit; color: inherit; }
+  button.choix {
+    display: block; width: 100%; text-align: left; background: var(--carte); color: var(--texte);
+    border: 2px solid var(--trait); border-radius: 16px; padding: 16px; margin: 12px 0;
+  }
+  button.choix[aria-pressed="true"] { border-color: var(--accent); }
+  .titre-carte { font-size: 15px; color: var(--doux); }
+  .grand { font-size: 34px; font-weight: 700; line-height: 1.15; margin: 6px 0; }
+  .principal {
+    display: block; width: 100%; min-height: 54px; border: 0; border-radius: 14px;
+    background: var(--accent); color: var(--fond); font-size: 18px; font-weight: 600; margin: 12px 0;
+  }
+  .principal:disabled { opacity: .35; }
+  .secondaire {
+    min-height: 44px; padding: 0 16px; border: 1px solid var(--trait); border-radius: 12px; background: none; margin: 4px 0;
+  }
+  .lien { background: none; border: 0; color: var(--accent); padding: 10px 0; min-height: 44px; text-decoration: underline; }
+  label.ligne { display: block; margin: 16px 0 4px; }
+  label.ligne span { float: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; height: 44px; accent-color: var(--accent); }
+  input[type=time], input[type=date], input[type=text], input[type=url] {
+    width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); font-size: 17px;
+  }
+  .segments { display: flex; gap: 6px; }
+  .segments button { flex: 1; min-height: 48px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); }
+  .segments button[aria-pressed="true"] { background: var(--accent); color: var(--fond); border-color: var(--accent); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--trait); }
+  tr.courant td { color: var(--accent); font-weight: 700; }
+  ul.conseils { margin: 6px 0; padding-left: 20px; }
   nav {
     position: fixed; left: 0; right: 0; bottom: 0; display: flex;
     background: var(--carte); border-top: 1px solid var(--trait);
     padding-bottom: env(safe-area-inset-bottom);
   }
-  nav button {
-    flex: 1; min-height: 56px; border: 0; background: none; color: var(--doux);
-    font: inherit; font-size: 13px;
-  }
+  nav button { flex: 1; min-height: 56px; border: 0; background: none; color: var(--doux); font-size: 13px; }
   nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
-  section[hidden] { display: none; }
+  section[hidden], [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -50,29 +81,63 @@
 </header>
 
 <main>
-  <section id="soir">
-    <h1>Ce soir</h1>
-    <div class="carte doux">Les deux scénarios arriveront ici (tranche 2).</div>
+  <!-- Premier lancement : confirmation du plan et de la date de début -->
+  <section id="depart" hidden>
+    <h1>Bienvenue</h1>
+    <p class="doux">Voici le plan par défaut. Il reste modifiable plus tard.</p>
+    <div id="departPlan"></div>
+    <label class="ligne" for="departDate">Date de début du plan</label>
+    <input type="date" id="departDate">
+    <button class="principal" id="departOk">Commencer</button>
+    <p class="doux petit">Pour reprendre une sauvegarde, utilise plutôt Réglages, Importer.</p>
   </section>
+
+  <section id="soir" hidden>
+    <h1>Ce soir</h1>
+    <div id="soirContenu"></div>
+  </section>
+
   <section id="matin" hidden>
     <h1>Ce matin</h1>
-    <div class="carte doux">Le journal du matin arrivera ici (tranche 2).</div>
+    <div id="matinContenu"></div>
   </section>
+
   <section id="semaine" hidden>
     <h1>Semaine</h1>
-    <div class="carte doux">Vue de la semaine (tranche 3).</div>
+    <div class="carte doux">Vue de la semaine : prochaine tranche.</div>
   </section>
+
   <section id="plan" hidden>
     <h1>Plan</h1>
-    <div class="carte doux">Liste des paliers (tranche 3).</div>
+    <div id="planContenu"></div>
   </section>
+
   <section id="reglages" hidden>
     <h1>Réglages</h1>
-    <div class="carte doux">Date de début, adresse du Google Sheet, export (tranche 2).</div>
+
+    <h2>Date de début du plan</h2>
+    <input type="date" id="regDate">
+    <button class="secondaire" id="regDateOk">Enregistrer la date</button>
+
+    <h2>Google Sheet</h2>
+    <label class="ligne doux petit" for="regUrl">Adresse du script (finit par /exec)</label>
+    <input type="url" id="regUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off">
+    <button class="secondaire" id="regUrlOk">Enregistrer l'adresse</button>
+    <button class="secondaire" id="regEnvoyer">Envoyer maintenant</button>
+    <p class="doux petit" id="regFile"></p>
+
+    <h2>Sauvegarde</h2>
+    <button class="secondaire" id="regExport">Exporter (JSON)</button>
+    <button class="secondaire" id="regImportBtn">Importer (JSON)</button>
+    <input type="file" id="regImport" accept="application/json,.json" hidden>
+
+    <h2>Réinitialiser</h2>
+    <button class="secondaire" id="regReset">Tout effacer sur ce téléphone</button>
+    <p class="doux petit">Le Google Sheet n'est pas touché.</p>
   </section>
 </main>
 
-<nav>
+<nav id="nav">
   <button data-ecran="soir">Ce soir</button>
   <button data-ecran="matin">Ce matin</button>
   <button data-ecran="semaine">Semaine</button>
@@ -81,25 +146,366 @@
 </nav>
 
 <script>
-const VERSION = 'v1';
+const VERSION = 'v2';
+const CLE = 'palier.etat';
 const $ = id => document.getElementById(id);
 
+// ---------- Textes d'accompagnement (statiques) ----------
+const TEXTES = {
+  rebond: 'Première semaine de ce palier : une à deux semaines de sommeil plus difficile sont attendues. C\'est transitoire.',
+  conseils: [
+    'Si tu es éveillé plus de 20 minutes, lève-toi et va dans une autre pièce.',
+    'Pas d\'écran au lit.',
+    'Garde ton heure de lever fixe, même après une mauvaise nuit.',
+  ],
+  ecart: 'Écart noté. Ça arrive. Le plan continue ce soir.',
+  tardive: 'Prise tardive. Effets résiduels plus probables en journée.',
+};
+
+const PLAN_DEFAUT = [
+  { id: 'p1', label: 'Sem 1-2',   durationWeeks: 2, doseMg: 3.75,  nightsPerWeek: 6, rescueDoseMg: 3.75 },
+  { id: 'p2', label: 'Sem 3-4',   durationWeeks: 2, doseMg: 3.75,  nightsPerWeek: 4, rescueDoseMg: 3.75 },
+  { id: 'p3', label: 'Sem 5-6',   durationWeeks: 2, doseMg: 1.875, nightsPerWeek: 4, rescueDoseMg: 3.75 },
+  { id: 'p4', label: 'Sem 7-8',   durationWeeks: 2, doseMg: 1.875, nightsPerWeek: 2, rescueDoseMg: 1.875 },
+  { id: 'p5', label: 'Sem 9-10',  durationWeeks: 2, doseMg: 1.875, nightsPerWeek: 1, rescueDoseMg: 1.875 },
+  { id: 'p6', label: 'Sem 11-12', durationWeeks: 2, doseMg: 0,     nightsPerWeek: 0, rescueDoseMg: null },
+];
+const DOSES = [0, 1.875, 3.75, 7.5];
+
+// ---------- Stockage ----------
+function charger() {
+  try { const e = JSON.parse(localStorage.getItem(CLE)); if (e) return e; } catch {}
+  return { plan: null, jours: {}, cfg: { url: '' }, file: [] };
+}
+let etat = charger();
+function sauver() { try { localStorage.setItem(CLE, JSON.stringify(etat)); } catch {} }
+
+// ---------- Dates (jour civil local, AAAA-MM-JJ) ----------
+const p2 = n => String(n).padStart(2, '0');
+const jour = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+const versDate = s => { const [a, m, j] = s.split('-').map(Number); return new Date(a, m - 1, j); };
+const ajouter = (s, n) => { const d = versDate(s); d.setDate(d.getDate() + n); return jour(d); };
+const ecartJours = (a, b) => Math.round((versDate(a) - versDate(b)) / 864e5);
+const aujourdhui = () => jour(new Date());
+// Le soir court jusqu'à 6 h : à 1 h du matin, on est encore « ce soir » de la veille
+const soirCourant = () => jour(new Date(Date.now() - 6 * 3600e3));
+const joli = s => versDate(s).toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' });
+function isoLocal(d = new Date()) {
+  const dec = -d.getTimezoneOffset(), sg = dec >= 0 ? '+' : '-', a = Math.abs(dec);
+  return `${jour(d)}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}${sg}${p2(a / 60 | 0)}:${p2(a % 60)}`;
+}
+const mg = n => String(n).replace('.', ',') + ' mg';
+const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
+
+// ---------- Logique du plan ----------
+// Situe un soir (date de la nuit) dans le plan : palier, semaine du plan, début de cette semaine.
+function situer(s) {
+  const plan = etat.plan, k = ecartJours(s, plan.startDate);
+  if (k < 0) return { avant: true };
+  const semPlan = Math.floor(k / 7), debutSemaine = ajouter(plan.startDate, semPlan * 7);
+  let cumul = 0;
+  for (const p of plan.paliers) {
+    if (semPlan < cumul + p.durationWeeks) return { palier: p, semPlan, debutSemaine, semDansPalier: semPlan - cumul + 1, fini: false };
+    cumul += p.durationWeeks;
+  }
+  return { palier: plan.paliers[plan.paliers.length - 1], semPlan, debutSemaine, semDansPalier: null, fini: true };
+}
+// La nuit du soir s est saisie le matin du lendemain
+const doseNuit = n => etat.jours[ajouter(n, 1)]?.morning?.doseTaken ?? null;
+function nuitsAvecDose(debut, finExclue) {
+  let c = 0;
+  for (let n = debut; n < finExclue; n = ajouter(n, 1)) if (doseNuit(n) > 0) c++;
+  return c;
+}
+// Écart (proposition en attente de validation, point 8) :
+// dose prise alors que le budget de nuits de la semaine était épuisé, ou dose plus forte que celle du palier.
+function estEcart(n) {
+  const c = situer(n), d = doseNuit(n);
+  if (c.avant || !(d > 0)) return false;
+  return nuitsAvecDose(c.debutSemaine, n) >= c.palier.nightsPerWeek || d > c.palier.doseMg;
+}
+function ecartsDuMois(s) {
+  let c = 0;
+  for (let n = s.slice(0, 8) + '01'; n < s; n = ajouter(n, 1)) if (n >= etat.plan.startDate && estEcart(n)) c++;
+  return c;
+}
+function nuitsSansJournal(c, s) {
+  let c2 = 0;
+  for (let n = c.debutSemaine; n < s; n = ajouter(n, 1)) if (!etat.jours[ajouter(n, 1)]?.morning) c2++;
+  return c2;
+}
+
+// ---------- Envoi au Google Sheet ----------
+let envoiEnCours = false, derniereErreur = '';
+function enFile(onglet, id, valeurs) {
+  etat.file = etat.file.filter(x => x.id !== id);
+  etat.file.push({ onglet, id, valeurs });
+  sauver();
+  envoyer();
+}
+async function envoyer() {
+  if (envoiEnCours || !etat.cfg.url || !navigator.onLine) { majFile(); return; }
+  envoiEnCours = true;
+  try {
+    while (etat.file.length) {
+      const x = etat.file[0];
+      // text/plain évite la pré-vérification CORS, qu'Apps Script ne gère pas
+      const r = await fetch(etat.cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(x) });
+      let rep; try { rep = JSON.parse(await r.text()); } catch { throw new Error(`réponse inattendue du script (${r.status})`); }
+      if (!rep.ok) throw new Error(rep.erreur || 'refus du script');
+      if (etat.file[0] === x) etat.file.shift(); else etat.file = etat.file.filter(y => y !== x);
+      sauver();
+      derniereErreur = '';
+    }
+  } catch (e) { derniereErreur = e.message; }
+  finally { envoiEnCours = false; majFile(); }
+}
+function majFile() {
+  const n = etat.file.length;
+  $('regFile').textContent = !etat.cfg.url ? 'Aucune adresse : les saisies restent sur le téléphone.'
+    : n ? `${pluriel(n, 'saisie')} en attente d'envoi.${derniereErreur ? ' Dernière erreur : ' + derniereErreur : ''}`
+    : 'Tout est envoyé.';
+}
+
+// ---------- Navigation ----------
+let ecranActuel = null;
 function afficher(ecran) {
+  if (!etat.plan && ecran !== 'reglages') ecran = 'depart';
+  ecranActuel = ecran;
   document.querySelectorAll('main section').forEach(s => s.hidden = s.id !== ecran);
   document.querySelectorAll('nav button').forEach(b => {
     if (b.dataset.ecran === ecran) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
+  ({ depart: rendreDepart, soir: rendreSoir, matin: rendreMatin, plan: rendrePlan, reglages: rendreReglages }[ecran] || (() => {}))();
+  scrollTo(0, 0);
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => afficher(b.dataset.ecran));
+const ecranParDefaut = () => new Date().getHours() < 12 ? 'matin' : 'soir';
 
-// Écran par défaut : Ce matin avant midi, Ce soir ensuite
-afficher(new Date().getHours() < 12 ? 'matin' : 'soir');
+// ---------- Tableau du plan ----------
+function tablePlan(paliers, courantId) {
+  return `<table><tr><th>Palier</th><th>Sem.</th><th>Dose</th><th>Nuits</th><th>Secours</th></tr>` +
+    paliers.map(p => `<tr class="${p.id === courantId ? 'courant' : ''}"><td>${p.label}</td><td>${p.durationWeeks}</td>` +
+      `<td>${mg(p.doseMg)}</td><td>${p.nightsPerWeek}/sem</td><td>${p.rescueDoseMg == null ? 'aucune' : mg(p.rescueDoseMg)}</td></tr>`).join('') +
+    `</table>`;
+}
 
+// ---------- Premier lancement ----------
+function rendreDepart() {
+  $('departPlan').innerHTML = `<div class="carte">${tablePlan(PLAN_DEFAUT)}</div>`;
+  if (!$('departDate').value) $('departDate').value = aujourdhui();
+}
+$('departOk').onclick = () => {
+  const d = $('departDate').value;
+  if (!d) return;
+  etat.plan = { startDate: d, paliers: structuredClone(PLAN_DEFAUT) };
+  sauver();
+  afficher(ecranParDefaut());
+};
+
+// ---------- Ce soir ----------
+let choixSoir = null, modifierSoir = false;
+function cartesSoir(c, budget, s) {
+  const p = c.palier;
+  let a;
+  if (budget > 0 && p.doseMg > 0) {
+    a = { dose: p.doseMg, grand: mg(p.doseMg) + ' au coucher',
+          texte: `Il te reste ${pluriel(budget, 'nuit')} avec dose cette semaine, ce soir compris.` };
+  } else if (p.rescueDoseMg != null && p.rescueDoseMg > 0) {
+    a = { dose: p.rescueDoseMg, avant: 'Nuit critique', grand: mg(p.rescueDoseMg),
+          texte: `Tu peux prendre ${mg(p.rescueDoseMg)}, mais ça compte comme un écart au plan. Écarts ce mois-ci : ${ecartsDuMois(s)}.` };
+  } else {
+    a = { dose: 0, grand: 'Pas de dose ce soir', texte: 'Le plan ne prévoit plus de dose de secours.', conseils: true };
+  }
+  const b = { dose: 0, grand: 'Pas de dose ce soir',
+              texte: budget > 0 ? `Tu gardes ${pluriel(budget, 'nuit')} en réserve pour une nuit où ça compte.` : '' };
+  return { sleep: a, risk: b };
+}
+const blocConseils = () => `<div class="carte"><strong>Pour une nuit sans dose</strong><ul class="conseils">${TEXTES.conseils.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+const NOMS_SCENARIO = { sleep: 'Je dois bien dormir ce soir', risk: 'Je peux prendre le risque de moins dormir' };
+
+function rendreSoir() {
+  const s = soirCourant(), c = situer(s), z = $('soirContenu');
+  if (c.avant) { z.innerHTML = `<div class="carte">Le plan commence le ${joli(etat.plan.startDate)}.</div>`; return; }
+  const p = c.palier;
+  const utilisees = nuitsAvecDose(c.debutSemaine, s);
+  const budget = Math.max(0, p.nightsPerWeek - utilisees);
+  const manquantes = nuitsSansJournal(c, s);
+  const cartes = cartesSoir(c, budget, s);
+  const deja = etat.jours[s]?.evening;
+
+  let h = `<p class="doux">${joli(s)} · ${p.label}${c.fini ? ' (plan terminé)' : `, semaine ${c.semDansPalier} sur ${p.durationWeeks}`}</p>`;
+  h += `<p>Nuits avec dose restantes cette semaine : <strong>${budget} sur ${p.nightsPerWeek}</strong></p>`;
+  if (manquantes) h += `<p class="alerte petit">${pluriel(manquantes, 'matin')} sans journal cette semaine : le compte peut être faux.</p>`;
+  if (c.semDansPalier === 1 && !deja) h += `<div class="carte petit">${TEXTES.rebond}</div>`;
+
+  if (deja && !modifierSoir) {
+    const carte = cartes[deja.scenario];
+    h += `<div class="carte"><div class="titre-carte">${NOMS_SCENARIO[deja.scenario]}</div>` +
+         `<div class="grand">${deja.recommendedDoseMg > 0 ? mg(deja.recommendedDoseMg) : 'Pas de dose ce soir'}</div>` +
+         `<p class="doux petit">Choix enregistré à ${deja.decidedAt.slice(11, 16)}.</p>` +
+         `<button class="lien" id="soirChanger">changer</button></div>`;
+    if (deja.recommendedDoseMg === 0) h += blocConseils();
+    z.innerHTML = h;
+    $('soirChanger').onclick = () => { modifierSoir = true; choixSoir = deja.scenario; rendreSoir(); };
+    return;
+  }
+
+  for (const cle of ['sleep', 'risk']) {
+    const k = cartes[cle];
+    h += `<button class="choix" data-scenario="${cle}" aria-pressed="${choixSoir === cle}">` +
+         `<div class="titre-carte">${NOMS_SCENARIO[cle]}</div>` +
+         (k.avant ? `<div class="alerte">${k.avant}</div>` : '') +
+         `<div class="grand">${k.grand}</div>` +
+         (k.texte ? `<div class="doux">${k.texte}</div>` : '') + `</button>`;
+  }
+  h += `<button class="principal" id="soirOk" ${choixSoir ? '' : 'disabled'}>Confirmer</button>`;
+  if (choixSoir && cartes[choixSoir].dose === 0) h += blocConseils();
+  z.innerHTML = h;
+
+  z.querySelectorAll('button.choix').forEach(b => b.onclick = () => { choixSoir = b.dataset.scenario; rendreSoir(); });
+  $('soirOk').onclick = () => {
+    const k = cartes[choixSoir], maintenant = isoLocal();
+    etat.jours[s] = etat.jours[s] || { date: s };
+    etat.jours[s].evening = { scenario: choixSoir, recommendedDoseMg: k.dose, decidedAt: maintenant };
+    sauver();
+    enFile('Soir', 'soir-' + s, {
+      'Soir du': s, 'Scénario': NOMS_SCENARIO[choixSoir], 'Dose affichée (mg)': k.dose,
+      'Palier': p.label, 'Nuits restantes': budget, 'Décidé le': maintenant,
+    });
+    modifierSoir = false; choixSoir = null;
+    rendreSoir();
+  };
+}
+
+// ---------- Ce matin ----------
+let saisieMatin = null, messageMatin = '';
+const estTardive = t => !!t && t >= '01:00' && t < '12:00';
+function rendreMatin() {
+  const d = aujourdhui(), nuit = ajouter(d, -1), z = $('matinContenu');
+  const existant = etat.jours[d]?.morning;
+  if (!saisieMatin || saisieMatin.date !== d) {
+    saisieMatin = existant ? { date: d, ...existant } : {
+      date: d, fog: 5, sleepQuality: 5, awakenings: 1,
+      doseTaken: etat.jours[nuit]?.evening?.recommendedDoseMg ?? 0, doseTime: '', note: '',
+    };
+  }
+  const m = saisieMatin;
+  let h = `<p class="doux">Nuit du ${joli(nuit)}${existant ? ' · déjà enregistrée, modifiable' : ''}</p>`;
+  h += `<label class="ligne" for="mFog">Brouillard <span id="vFog">${m.fog}</span></label><input type="range" id="mFog" min="0" max="10" value="${m.fog}">`;
+  h += `<label class="ligne" for="mSleep">Qualité du sommeil <span id="vSleep">${m.sleepQuality}</span></label><input type="range" id="mSleep" min="0" max="10" value="${m.sleepQuality}">`;
+  h += `<label class="ligne" for="mAw">Réveils <span id="vAw">${m.awakenings >= 5 ? '5+' : m.awakenings}</span></label><input type="range" id="mAw" min="0" max="5" value="${m.awakenings}">`;
+  h += `<label class="ligne">Dose réellement prise</label><div class="segments">` +
+       DOSES.map(x => `<button data-dose="${x}" aria-pressed="${m.doseTaken === x}">${x === 0 ? 'Aucune' : String(x).replace('.', ',')}</button>`).join('') + `</div>`;
+  h += `<div id="blocHeure" ${m.doseTaken > 0 ? '' : 'hidden'}><label class="ligne" for="mTime">Heure de prise</label><input type="time" id="mTime" value="${m.doseTime || ''}">` +
+       `<p class="alerte petit" id="mTardive" ${estTardive(m.doseTime) ? '' : 'hidden'}>${TEXTES.tardive}</p></div>`;
+  h += `<label class="ligne" for="mNote">Note (facultatif)</label><input type="text" id="mNote">`;
+  h += `<button class="principal" id="matinOk">Enregistrer</button><div id="matinMessage">${messageMatin}</div>`;
+  z.innerHTML = h;
+  $('mNote').value = m.note || '';
+
+  const curseur = (id, cle, aff, fmt = v => v) => $(id).oninput = e => { m[cle] = Number(e.target.value); $(aff).textContent = fmt(m[cle]); };
+  curseur('mFog', 'fog', 'vFog');
+  curseur('mSleep', 'sleepQuality', 'vSleep');
+  curseur('mAw', 'awakenings', 'vAw', v => v >= 5 ? '5+' : v);
+  z.querySelectorAll('.segments button').forEach(b => b.onclick = () => {
+    m.doseTaken = Number(b.dataset.dose);
+    z.querySelectorAll('.segments button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('blocHeure').hidden = !(m.doseTaken > 0);
+  });
+  $('mTime').oninput = e => { m.doseTime = e.target.value; $('mTardive').hidden = !estTardive(m.doseTime); };
+  $('mNote').oninput = e => { m.note = e.target.value; };
+
+  $('matinOk').onclick = () => {
+    const entree = { fog: m.fog, sleepQuality: m.sleepQuality, awakenings: m.awakenings, doseTaken: m.doseTaken };
+    if (m.doseTaken > 0 && m.doseTime) entree.doseTime = m.doseTime;
+    if (m.note && m.note.trim()) entree.note = m.note.trim();
+    etat.jours[d] = etat.jours[d] || { date: d };
+    etat.jours[d].morning = entree;
+    sauver();
+    const c = situer(nuit), ecart = estEcart(nuit);
+    enFile('Matin', 'matin-' + d, {
+      'Nuit du': nuit, 'Brouillard': entree.fog, 'Sommeil': entree.sleepQuality, 'Réveils': entree.awakenings,
+      'Dose (mg)': entree.doseTaken, 'Heure de prise': entree.doseTime || '', 'Écart': ecart ? 'oui' : '',
+      'Palier': c.avant ? '' : c.palier.label, 'Note': entree.note || '', 'Saisi le': isoLocal(),
+    });
+    messageMatin = `<p><strong>Enregistré.</strong></p>` +
+      (ecart ? `<div class="carte">${TEXTES.ecart}</div>` : '') +
+      (estTardive(entree.doseTime) ? `<p class="alerte">${TEXTES.tardive}</p>` : '');
+    saisieMatin = null;
+    rendreMatin();
+    messageMatin = '';
+  };
+}
+
+// ---------- Plan ----------
+function rendrePlan() {
+  const c = situer(soirCourant());
+  let total = 0; etat.plan.paliers.forEach(p => total += p.durationWeeks);
+  const fin = ajouter(etat.plan.startDate, total * 7 - 1);
+  $('planContenu').innerHTML =
+    `<p class="doux">Du ${joli(etat.plan.startDate)} au ${joli(fin)}</p>` +
+    (c.avant ? '<p>Le plan n\'a pas encore commencé.</p>' : `<p>Semaine ${Math.min(c.semPlan + 1, total)} sur ${total}${c.fini ? ' · terminé' : ''}</p>`) +
+    `<div class="carte">${tablePlan(etat.plan.paliers, c.avant ? null : c.palier.id)}</div>` +
+    `<p class="doux petit">Modification des paliers : prochaine tranche.</p>`;
+}
+
+// ---------- Réglages ----------
+function rendreReglages() {
+  $('regDate').value = etat.plan?.startDate || '';
+  $('regUrl').value = etat.cfg.url || '';
+  majFile();
+}
+$('regDateOk').onclick = () => {
+  const d = $('regDate').value;
+  if (!d) return;
+  if (!etat.plan) { etat.plan = { startDate: d, paliers: structuredClone(PLAN_DEFAUT) }; }
+  else if (!confirm('Changer la date de début ? Le journal est conservé, mais les paliers sont recalculés.')) return;
+  etat.plan.startDate = d;
+  sauver();
+  alert('Date enregistrée.');
+};
+$('regUrlOk').onclick = () => { etat.cfg.url = $('regUrl').value.trim(); sauver(); envoyer(); };
+$('regEnvoyer').onclick = () => envoyer();
+$('regExport').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(etat, null, 2)], { type: 'application/json' }));
+  a.download = `palier-${aujourdhui()}.json`;
+  a.click();
+};
+$('regImportBtn').onclick = () => $('regImport').click();
+$('regImport').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const x = JSON.parse(await f.text());
+    if (!x || typeof x.jours !== 'object' || !('plan' in x)) throw new Error('fichier non reconnu');
+    if (!confirm('Remplacer toutes les données de ce téléphone par ce fichier ?')) return;
+    etat = { plan: x.plan, jours: x.jours, cfg: x.cfg || { url: '' }, file: x.file || [] };
+    sauver();
+    alert('Import terminé.');
+    afficher('reglages');
+  } catch (err) { alert('Import impossible : ' + err.message); }
+};
+$('regReset').onclick = () => {
+  if (!confirm('Effacer le plan et tout le journal de ce téléphone ?')) return;
+  if (!confirm('Vraiment ? Pense à exporter avant.')) return;
+  localStorage.removeItem(CLE);
+  etat = charger();
+  afficher('depart');
+};
+
+// ---------- Démarrage ----------
 function majReseau() { $('reseau').textContent = navigator.onLine ? 'En ligne' : 'Hors ligne'; }
-addEventListener('online', majReseau); addEventListener('offline', majReseau); majReseau();
+addEventListener('online', () => { majReseau(); envoyer(); });
+addEventListener('offline', majReseau);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { envoyer(); if (ecranActuel) afficher(ecranActuel); } });
+majReseau();
 $('version').textContent = VERSION;
+afficher(ecranParDefaut());
+envoyer();
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 </script>
 </body>
 </html>
