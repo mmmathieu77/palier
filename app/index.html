@@ -174,8 +174,8 @@
     <button class="secondaire" id="regImportBtn">Importer (JSON)</button>
     <input type="file" id="regImport" accept="application/json,.json" hidden>
 
-    <h2>Médecin</h2>
-    <button class="secondaire" id="regResume">Résumé pour le médecin</button>
+    <h2>Résumé</h2>
+    <button class="secondaire" id="regResume">Voir le résumé</button>
 
     <h2>Démonstration</h2>
     <button class="secondaire" id="regDemo">Charger 14 jours de démonstration</button>
@@ -203,7 +203,7 @@
 </nav>
 
 <script>
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CLE = 'palier.etat';
 const $ = id => document.getElementById(id);
 
@@ -803,7 +803,7 @@ function courbe(fin, nb) {
              `<span><span class="b" style="background:var(--accent);opacity:.35"></span>nuit avec dose</span><span><span class="b" style="background:var(--alerte);opacity:.5"></span>écart</span></div>`;
 }
 
-// ---------- Résumé pour le médecin (une page imprimable) ----------
+// ---------- Résumé (une page imprimable, pour le médecin) ----------
 function rendreResume() {
   const z = $('resumeContenu'), cs = situer(soirCourant()), total = totalSemaines();
   if (cs.avant) { z.innerHTML = '<p>Le plan n\'a pas encore commencé.</p>'; return; }
@@ -824,7 +824,7 @@ function rendreResume() {
   const moy = (l, k) => { const v = moyenne(l.map(m => m[k])); return v == null ? '-' : fmt1(v); };
   const tardives = tous.filter(m => m.doseTaken > 0 && estTardive(m.doseTime)).length;
   z.innerHTML =
-    `<h1>Résumé pour le médecin</h1>` +
+    `<h1>Résumé</h1>` +
     `<p class="doux">Plan commencé le ${joli(etat.plan.startDate)} · ${cs.fini ? 'plan terminé' : `semaine ${cs.semPlan + 1} sur ${total}, palier ${cs.palier.label}`} · généré le ${joli(aujourdhui())}</p>` +
     `<h2>Plan</h2>${tablePlan(etat.plan.paliers, cs.fini ? null : cs.palier.id)}` +
     `<h2>Adhérence par semaine</h2><table><tr><th>Sem.</th><th>Palier</th><th>Nuits avec dose / permises</th><th>mg pris / prévus</th><th>Écarts</th><th>Brouillard</th><th>Sommeil</th><th>Journal</th></tr>${lignes}</table>` +
@@ -835,7 +835,9 @@ function rendreResume() {
     `<li>Réveils moyens par nuit : ${moy(tous, 'awakenings')}.</li></ul>` +
     `<div class="graphes"><div><h2>mg par semaine</h2>${graphique(total, cs)}</div><div><h2>30 dernières nuits</h2>${courbe(soirCourant(), 30)}</div></div>`;
 }
-$('resumeImprimer').onclick = () => window.print();
+// Le titre de la page devient le nom du PDF enregistré : « Résumé 2026-11-04 »
+$('resumeImprimer').onclick = () => { document.title = `Résumé ${aujourdhui()}`; window.print(); };
+addEventListener('afterprint', () => { document.title = 'Palier'; });
 $('resumeRetour').onclick = () => afficher('reglages');
 $('regResume').onclick = () => afficher('resume');
 
