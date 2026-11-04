@@ -64,6 +64,33 @@
   th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--trait); }
   tr.courant td { color: var(--accent); font-weight: 700; }
   ul.conseils { margin: 6px 0; padding-left: 20px; }
+  tr.passe td { color: var(--doux); }
+  tr.modifiable { cursor: pointer; }
+  tr.choisi td { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .barre { height: 10px; border-radius: 5px; background: var(--trait); overflow: hidden; margin: 6px 0; }
+  .barre div { height: 100%; background: var(--accent); }
+  .boutons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .grille { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 13px; }
+  .grille .j { color: var(--doux); }
+  .grille .auj { color: var(--accent); font-weight: 700; }
+  .pa { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--doux); margin: 6px auto; }
+  .pa.pleine { background: var(--accent); border-color: var(--accent); }
+  .pa.demi { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border-color: var(--accent); }
+  .pa.ecart { background: var(--alerte); border-color: var(--alerte); }
+  .pa.inconnu { border-style: dashed; opacity: .4; }
+  .barres { height: 64px; display: flex; justify-content: center; align-items: flex-end; gap: 3px; }
+  .barres div { width: 9px; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .b-fog { background: var(--doux); }
+  .b-sleep { background: var(--accent); }
+  .legende { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--doux); margin-top: 10px; align-items: center; }
+  .legende .pa, .legende .b { display: inline-block; vertical-align: middle; margin: 0 4px 0 0; }
+  .legende .pa { width: 14px; height: 14px; }
+  .legende .b { width: 9px; height: 14px; border-radius: 2px; }
+  .nav-sem { display: flex; justify-content: space-between; align-items: center; }
+  .nav-sem button { min-width: 44px; }
+  select { min-height: 44px; padding: 0 8px; border: 1px solid var(--trait); border-radius: 10px; background: var(--carte); font-size: 17px; width: 100%; }
+  .champs { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  svg text { fill: var(--doux); font-size: 10px; }
   nav {
     position: fixed; left: 0; right: 0; bottom: 0; display: flex;
     background: var(--carte); border-top: 1px solid var(--trait);
@@ -104,7 +131,7 @@
 
   <section id="semaine" hidden>
     <h1>Semaine</h1>
-    <div class="carte doux">Vue de la semaine : prochaine tranche.</div>
+    <div id="semaineContenu"></div>
   </section>
 
   <section id="plan" hidden>
@@ -146,7 +173,7 @@
 </nav>
 
 <script>
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CLE = 'palier.etat';
 const $ = id => document.getElementById(id);
 
@@ -160,6 +187,8 @@ const TEXTES = {
   ],
   ecart: 'Écart noté. Ça arrive. Le plan continue ce soir.',
   tardive: 'Prise tardive. Effets résiduels plus probables en journée.',
+  finPalier: 'Dernière semaine de ce palier. Beau travail.',
+  finPlan: 'Le plan est terminé. Bravo. Garde le journal encore deux semaines.',
 };
 
 const PLAN_DEFAUT = [
@@ -217,7 +246,7 @@ function nuitsAvecDose(debut, finExclue) {
   for (let n = debut; n < finExclue; n = ajouter(n, 1)) if (doseNuit(n) > 0) c++;
   return c;
 }
-// Écart (proposition en attente de validation, point 8) :
+// Écart (validé, point 8) :
 // dose prise alors que le budget de nuits de la semaine était épuisé, ou dose plus forte que celle du palier.
 function estEcart(n) {
   const c = situer(n), d = doseNuit(n);
@@ -234,6 +263,95 @@ function nuitsSansJournal(c, s) {
   for (let n = c.debutSemaine; n < s; n = ajouter(n, 1)) if (!etat.jours[ajouter(n, 1)]?.morning) c2++;
   return c2;
 }
+
+// ---------- Semaine du plan et suggestion hebdomadaire ----------
+const fmt1 = x => x.toFixed(1).replace('.', ',');
+const moyenne = l => l.length ? l.reduce((a, b) => a + b, 0) / l.length : null;
+const debutSem = w => ajouter(etat.plan.startDate, w * 7);
+function totalSemaines() { let t = 0; etat.plan.paliers.forEach(p => t += p.durationWeeks); return t; }
+
+function statsSemaine(w) {
+  const debut = debutSem(w);
+  const nuits = [...Array(7)].map((_, i) => ajouter(debut, i));
+  const matins = nuits.map(n => etat.jours[ajouter(n, 1)]?.morning || null);
+  const ecarts = nuits.filter(n => n >= etat.plan.startDate && estEcart(n)).length;
+  const saisis = matins.filter(Boolean);
+  // Tendance du brouillard : pente simple (moindres carrés) sur les jours saisis, ramenée à 7 jours
+  const pts = matins.map((m, i) => m ? [i, m.fog] : null).filter(Boolean);
+  let hausseFog = null;
+  if (pts.length >= 3) {
+    const mx = moyenne(pts.map(p => p[0])), my = moyenne(pts.map(p => p[1]));
+    const num = pts.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0), den = pts.reduce((a, [x]) => a + (x - mx) ** 2, 0);
+    hausseFog = den ? num / den * 6 : 0;
+  }
+  return {
+    debut, nuits, matins, ecarts, nbSaisis: saisis.length,
+    sommeil: moyenne(saisis.map(m => m.sleepQuality)), brouillard: moyenne(saisis.map(m => m.fog)),
+    hausseFog, terminee: soirCourant() >= nuits[6],
+  };
+}
+
+// Règles du PRD 6.3. L'app suggère, l'utilisateur confirme ; elle ne change jamais le plan seule.
+function suggestion(w) {
+  const s = statsSemaine(w), raisons = [];
+  if (s.ecarts >= 2) raisons.push(`${s.ecarts} écarts cette semaine`);
+  if (s.sommeil != null && s.sommeil < 4) raisons.push(`sommeil moyen de ${fmt1(s.sommeil)} sur 10`);
+  if (s.hausseFog != null && s.hausseFog > 1) raisons.push(`brouillard en hausse de ${fmt1(s.hausseFog)} points`);
+  if (raisons.length) return { type: 'tenir', raisons, s };
+  if (s.terminee && s.ecarts <= 1 && s.sommeil != null && s.sommeil >= 5) return { type: 'avancer', s };
+  return { type: 'neutre', s };
+}
+
+function carteSuggestion(w, actif = true) {
+  const sg = suggestion(w), c = situer(debutSem(w));
+  if (c.avant) return '';
+  const p = c.palier, i = etat.plan.paliers.indexOf(p), suivant = etat.plan.paliers[i + 1];
+  const finDePalier = !c.fini && c.semDansPalier === p.durationWeeks;
+  const decision = (etat.decisions || {})[w];
+  let h = `<div class="carte"><div class="titre-carte">Suggestion de la semaine ${w + 1}</div>`;
+  if (finDePalier) h += `<p>${TEXTES.finPalier}</p>`;
+  if (sg.type === 'tenir') {
+    h += `<div class="grand" style="font-size:24px">Tenir le palier</div><p class="doux">${sg.raisons.join(', ')}.</p>`;
+  } else if (sg.type === 'avancer' && finDePalier && suivant) {
+    h += `<div class="grand" style="font-size:24px">Passer au palier suivant</div>` +
+         `<p class="doux">${suivant.label} : ${mg(suivant.doseMg)}, ${suivant.nightsPerWeek} nuit(s) par semaine, à partir du ${joli(debutSem(w + 1))}.</p>`;
+  } else if (sg.type === 'avancer') {
+    h += `<div class="grand" style="font-size:24px">Continuer comme prévu</div><p class="doux">Bonne semaine : ${sg.s.ecarts} écart(s), sommeil moyen ${fmt1(sg.s.sommeil)}.</p>`;
+  } else {
+    h += `<div class="grand" style="font-size:24px">Continuer comme prévu</div>` +
+         `<p class="doux">${sg.s.nbSaisis < 3 ? 'Pas assez de matins saisis pour juger.' : 'Pas de signal net cette semaine.'}</p>`;
+  }
+  if (decision) {
+    h += `<p><strong>${decision === 'prolonger' ? 'Palier prolongé d\'une semaine.' : 'Suggestion acceptée.'}</strong></p>`;
+  } else if (actif) {
+    h += `<div class="boutons">`;
+    if (sg.type === 'tenir') h += `<button class="principal" data-action="prolonger" data-w="${w}">Prolonger d'une semaine</button>`;
+    else {
+      h += `<button class="principal" data-action="accepter" data-w="${w}">D'accord</button>`;
+      h += `<button class="secondaire" data-action="prolonger" data-w="${w}">Prolonger d'une semaine</button>`;
+    }
+    h += `</div>`;
+  }
+  return h + `</div>`;
+}
+
+function decider(w, quoi) {
+  etat.decisions = etat.decisions || {};
+  if (etat.decisions[w]) return;
+  if (quoi === 'prolonger') {
+    if (!confirm('Ajouter une semaine au palier en cours ? Les paliers suivants sont décalés d\'autant.')) return;
+    situer(debutSem(w)).palier.durationWeeks += 1;
+  }
+  etat.decisions[w] = quoi;
+  sauver();
+  afficher(ecranActuel);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-action]');
+  if (!b) return;
+  if (b.dataset.action === 'prolongerPlan' || b.dataset.action === 'recommencer') return actionPlan(b.dataset.action);
+  if (b.dataset.action === 'prolonger' || b.dataset.action === 'accepter') decider(Number(b.dataset.w), b.dataset.action === 'prolonger' ? 'prolonger' : 'accepter');
+});
 
 // ---------- Envoi au Google Sheet ----------
 let envoiEnCours = false, derniereErreur = '';
@@ -268,7 +386,7 @@ function majFile() {
 }
 
 // ---------- Navigation ----------
-let ecranActuel = null;
+let ecranActuel = null, ecranActuelPrec = null, palierChoisi = null, semVue = null;
 function afficher(ecran) {
   if (!etat.plan && ecran !== 'reglages') ecran = 'depart';
   ecranActuel = ecran;
@@ -276,8 +394,9 @@ function afficher(ecran) {
   document.querySelectorAll('nav button').forEach(b => {
     if (b.dataset.ecran === ecran) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
-  ({ depart: rendreDepart, soir: rendreSoir, matin: rendreMatin, plan: rendrePlan, reglages: rendreReglages }[ecran] || (() => {}))();
-  scrollTo(0, 0);
+  if (ecran !== ecranActuelPrec) { palierChoisi = null; semVue = null; scrollTo(0, 0); }
+  ecranActuelPrec = ecran;
+  ({ depart: rendreDepart, soir: rendreSoir, matin: rendreMatin, semaine: rendreSemaine, plan: rendrePlan, reglages: rendreReglages }[ecran] || (() => {}))();
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => afficher(b.dataset.ecran));
 const ecranParDefaut = () => new Date().getHours() < 12 ? 'matin' : 'soir';
@@ -338,6 +457,9 @@ function rendreSoir() {
   h += `<p>Nuits avec dose restantes cette semaine : <strong>${budget} sur ${p.nightsPerWeek}</strong></p>`;
   if (manquantes) h += `<p class="alerte petit">${pluriel(manquantes, 'matin')} sans journal cette semaine : le compte peut être faux.</p>`;
   if (c.semDansPalier === 1 && !deja) h += `<div class="carte petit">${TEXTES.rebond}</div>`;
+  if (c.fini) h += `<div class="carte">${TEXTES.finPlan}</div>`;
+  // Dernier soir de la semaine du plan : la suggestion hebdomadaire s'affiche aussi ici
+  const suggestionCeSoir = !c.fini && ajouter(c.debutSemaine, 6) === s ? carteSuggestion(c.semPlan) : '';
 
   if (deja && !modifierSoir) {
     const carte = cartes[deja.scenario];
@@ -346,7 +468,7 @@ function rendreSoir() {
          `<p class="doux petit">Choix enregistré à ${deja.decidedAt.slice(11, 16)}.</p>` +
          `<button class="lien" id="soirChanger">changer</button></div>`;
     if (deja.recommendedDoseMg === 0) h += blocConseils();
-    z.innerHTML = h;
+    z.innerHTML = h + suggestionCeSoir;
     $('soirChanger').onclick = () => { modifierSoir = true; choixSoir = deja.scenario; rendreSoir(); };
     return;
   }
@@ -361,7 +483,7 @@ function rendreSoir() {
   }
   h += `<button class="principal" id="soirOk" ${choixSoir ? '' : 'disabled'}>Confirmer</button>`;
   if (choixSoir && cartes[choixSoir].dose === 0) h += blocConseils();
-  z.innerHTML = h;
+  z.innerHTML = h + suggestionCeSoir;
 
   z.querySelectorAll('button.choix').forEach(b => b.onclick = () => { choixSoir = b.dataset.scenario; rendreSoir(); });
   $('soirOk').onclick = () => {
@@ -438,16 +560,141 @@ function rendreMatin() {
   };
 }
 
+// ---------- Semaine ----------
+const court = s => versDate(s).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' });
+function rendreSemaine() {
+  const z = $('semaineContenu'), cs = situer(soirCourant());
+  if (cs.avant) { z.innerHTML = `<div class="carte">Le plan commence le ${joli(etat.plan.startDate)}.</div>`; return; }
+  const max = cs.semPlan;
+  if (semVue == null || semVue > max) semVue = max;
+  const w = semVue, st = statsSemaine(w), c = situer(st.debut), auj = soirCourant();
+  let h = `<div class="nav-sem"><button class="secondaire" id="semPrec" ${w > 0 ? '' : 'disabled'} aria-label="Semaine précédente">‹</button>` +
+          `<div style="text-align:center"><strong>Semaine ${w + 1}</strong> · ${c.palier.label}<br><span class="doux petit">nuits du ${court(st.nuits[0])} au ${court(st.nuits[6])}</span></div>` +
+          `<button class="secondaire" id="semSuiv" ${w < max ? '' : 'disabled'} aria-label="Semaine suivante">›</button></div>`;
+  h += carteSuggestion(w, w === max);
+  h += `<div class="carte"><div class="grille">`;
+  st.nuits.forEach((n, i) => {
+    const m = st.matins[i];
+    const jourSem = versDate(n).toLocaleDateString('fr-CA', { weekday: 'short' }).replace('.', '');
+    const cl = !m ? 'inconnu' : estEcart(n) ? 'ecart' : m.doseTaken === 0 ? '' : m.doseTaken < 3.75 ? 'demi' : 'pleine';
+    h += `<div><div class="${n === auj ? 'auj' : 'j'}">${jourSem}<br>${versDate(n).getDate()}</div><div class="pa ${cl}"></div>` +
+         `<div class="barres">${m ? `<div class="b-fog" style="height:${m.fog * 6}px"></div><div class="b-sleep" style="height:${m.sleepQuality * 6}px"></div>` : ''}</div></div>`;
+  });
+  h += `</div><div class="legende">` +
+       `<span><span class="pa"></span>sans dose</span><span><span class="pa demi"></span>1,875</span><span><span class="pa pleine"></span>3,75 et plus</span>` +
+       `<span><span class="pa ecart"></span>écart</span><span><span class="pa inconnu"></span>pas de journal</span>` +
+       `<span><span class="b b-fog"></span>brouillard</span><span><span class="b b-sleep"></span>sommeil</span></div></div>`;
+  const avecDose = st.matins.filter(m => m && m.doseTaken > 0).length;
+  h += `<div class="carte petit">Nuits avec dose : <strong>${avecDose}</strong> sur ${c.palier.nightsPerWeek} permises · écarts : <strong>${st.ecarts}</strong><br>` +
+       `Moyennes : brouillard <strong>${st.brouillard == null ? '-' : fmt1(st.brouillard)}</strong>, sommeil <strong>${st.sommeil == null ? '-' : fmt1(st.sommeil)}</strong> (${pluriel(st.nbSaisis, 'matin')} saisi${st.nbSaisis > 1 ? 's' : ''})</div>`;
+  z.innerHTML = h;
+  $('semPrec').onclick = () => { semVue = w - 1; rendreSemaine(); };
+  $('semSuiv').onclick = () => { semVue = w + 1; rendreSemaine(); };
+}
+
 // ---------- Plan ----------
+function graphique(total, cs) {
+  const W = 320, H = 150, gauche = 30, bas = 18, haut = 10, bw = (W - gauche) / total;
+  const prevu = [], reel = [];
+  for (let w = 0; w < total; w++) {
+    const p = situer(debutSem(w)).palier;
+    prevu.push(p.doseMg * p.nightsPerWeek);
+    if (!cs.avant && w <= cs.semPlan) {
+      let t = 0; for (let i = 0; i < 7; i++) t += doseNuit(ajouter(debutSem(w), i)) || 0;
+      reel.push(t);
+    } else reel.push(null);
+  }
+  const max = Math.max(1, ...prevu, ...reel.filter(x => x != null));
+  const y = v => H - bas - v / max * (H - bas - haut);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Milligrammes par semaine, prévu et réel">`;
+  s += `<text x="0" y="${haut + 4}">${String(+max.toFixed(2)).replace('.', ',')}</text><text x="0" y="${H - bas}">0</text>`;
+  s += `<line x1="${gauche}" x2="${W}" y1="${H - bas}" y2="${H - bas}" stroke="var(--trait)"/>`;
+  for (let w = 0; w < total; w++) {
+    const x = gauche + w * bw;
+    if (prevu[w] > 0) s += `<rect x="${x + 1}" y="${y(prevu[w])}" width="${bw - 2}" height="${H - bas - y(prevu[w])}" fill="none" stroke="var(--doux)" stroke-width="1"/>`;
+    if (reel[w]) s += `<rect x="${x + bw * .25}" y="${y(reel[w])}" width="${bw * .5}" height="${H - bas - y(reel[w])}" fill="var(--accent)"/>`;
+    if (w % 2 === 0) s += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle">${w + 1}</text>`;
+  }
+  return s + `</svg><div class="legende"><span><span class="b" style="border:1px solid var(--doux)"></span>mg prévus par semaine</span>` +
+             `<span><span class="b b-sleep"></span>mg réellement pris</span></div>`;
+}
+
 function rendrePlan() {
+  const c = situer(soirCourant()), total = totalSemaines(), paliers = etat.plan.paliers;
+  const iCourant = c.avant ? -1 : paliers.indexOf(c.palier);
+  const modifiable = i => c.avant || i > iCourant || (i === iCourant && !c.fini);
+  const pct = c.avant ? 0 : c.fini ? 100 : Math.round(c.semPlan / total * 100);
+  let h = `<p class="doux">Du ${joli(etat.plan.startDate)} au ${joli(ajouter(etat.plan.startDate, total * 7 - 1))}</p>` +
+          `<p>${c.avant ? 'Le plan n\'a pas encore commencé.' : c.fini ? 'Plan terminé.' : `Semaine ${c.semPlan + 1} sur ${total}`}</p>` +
+          `<div class="barre"><div style="width:${pct}%"></div></div>`;
+  h += `<div class="carte"><table><tr><th>Palier</th><th>Sem.</th><th>Dose</th><th>Nuits</th><th>Secours</th></tr>`;
+  let cumul = 0;
+  paliers.forEach((p, i) => {
+    const cl = [i === iCourant && !c.fini ? 'courant' : '', !c.avant && (i < iCourant || c.fini) ? 'passe' : '',
+                modifiable(i) ? 'modifiable' : '', i === palierChoisi ? 'choisi' : ''].join(' ');
+    h += `<tr class="${cl}" data-i="${i}"><td>${p.label}</td><td>${cumul + 1}-${cumul + p.durationWeeks}</td><td>${mg(p.doseMg)}</td>` +
+         `<td>${p.nightsPerWeek}/sem</td><td>${p.rescueDoseMg == null ? 'aucune' : mg(p.rescueDoseMg)}</td></tr>`;
+    cumul += p.durationWeeks;
+  });
+  h += `</table><p class="doux petit">Touche un palier en cours ou à venir pour le modifier. Les paliers passés restent tels quels.</p></div>`;
+
+  if (palierChoisi != null && modifiable(palierChoisi)) {
+    const p = paliers[palierChoisi], minDur = palierChoisi === iCourant ? c.semDansPalier : 1;
+    const opts = (vals, cur, aff = v => v) => vals.map(v => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${aff(v)}</option>`).join('');
+    const de = (a, b) => [...Array(b - a + 1)].map((_, k) => a + k);
+    h += `<div class="carte"><strong>Modifier ${p.label}</strong>` +
+         `<label class="ligne" for="eLabel">Nom</label><input type="text" id="eLabel" value="${p.label.replace(/"/g, '&quot;')}">` +
+         `<div class="champs"><div><label class="ligne" for="eDur">Semaines</label><select id="eDur">${opts(de(minDur, 8), p.durationWeeks)}</select></div>` +
+         `<div><label class="ligne" for="eNuits">Nuits/sem</label><select id="eNuits">${opts(de(0, 7), p.nightsPerWeek)}</select></div>` +
+         `<div><label class="ligne" for="eDose">Dose</label><select id="eDose">${opts(DOSES, p.doseMg, mg)}</select></div>` +
+         `<div><label class="ligne" for="eSec">Secours</label><select id="eSec">${opts(['aucune', 1.875, 3.75, 7.5], p.rescueDoseMg ?? 'aucune', v => v === 'aucune' ? v : mg(v))}</select></div></div>` +
+         `<div class="boutons"><button class="principal" id="eOk">Enregistrer</button><button class="secondaire" id="eAnnuler">Annuler</button></div></div>`;
+  }
+
+  if (!c.avant && !c.fini) {
+    h += `<div class="boutons"><button class="secondaire" data-action="prolongerPlan">Prolonger d'une semaine</button>` +
+         `<button class="secondaire" data-action="recommencer">Recommencer le palier</button></div>`;
+  }
+  h += `<h2>Milligrammes par semaine</h2><div class="carte">${graphique(total, c)}</div>`;
+  $('planContenu').innerHTML = h;
+
+  $('planContenu').querySelectorAll('tr[data-i]').forEach(tr => tr.onclick = () => {
+    const i = Number(tr.dataset.i);
+    if (!modifiable(i)) return;
+    palierChoisi = palierChoisi === i ? null : i;
+    rendrePlan();
+  });
+  if ($('eOk')) {
+    $('eOk').onclick = () => {
+      const p = paliers[palierChoisi], sec = $('eSec').value;
+      p.label = $('eLabel').value.trim() || p.label;
+      p.durationWeeks = Number($('eDur').value);
+      p.nightsPerWeek = Number($('eNuits').value);
+      p.doseMg = Number($('eDose').value);
+      p.rescueDoseMg = sec === 'aucune' ? null : Number(sec);
+      sauver();
+      palierChoisi = null;
+      rendrePlan();
+    };
+    $('eAnnuler').onclick = () => { palierChoisi = null; rendrePlan(); };
+  }
+}
+
+function actionPlan(quoi) {
   const c = situer(soirCourant());
-  let total = 0; etat.plan.paliers.forEach(p => total += p.durationWeeks);
-  const fin = ajouter(etat.plan.startDate, total * 7 - 1);
-  $('planContenu').innerHTML =
-    `<p class="doux">Du ${joli(etat.plan.startDate)} au ${joli(fin)}</p>` +
-    (c.avant ? '<p>Le plan n\'a pas encore commencé.</p>' : `<p>Semaine ${Math.min(c.semPlan + 1, total)} sur ${total}${c.fini ? ' · terminé' : ''}</p>`) +
-    `<div class="carte">${tablePlan(etat.plan.paliers, c.avant ? null : c.palier.id)}</div>` +
-    `<p class="doux petit">Modification des paliers : prochaine tranche.</p>`;
+  if (c.avant || c.fini) return;
+  const p = c.palier, paliers = etat.plan.paliers, i = paliers.indexOf(p);
+  if (quoi === 'prolongerPlan') {
+    if (!confirm(`Ajouter une semaine au palier ${p.label} ? Les paliers suivants sont décalés d'autant.`)) return;
+    p.durationWeeks += 1;
+  } else {
+    if (!confirm(`Recommencer le palier ${p.label} ? La semaine en cours se termine, puis le palier repart à la semaine 1.`)) return;
+    const copie = { ...p, id: 'p' + Date.now().toString(36), label: p.label + ' (reprise)' };
+    p.durationWeeks = c.semDansPalier;
+    paliers.splice(i + 1, 0, copie);
+  }
+  sauver();
+  rendrePlan();
 }
 
 // ---------- Réglages ----------
@@ -481,7 +728,7 @@ $('regImport').onchange = async e => {
     const x = JSON.parse(await f.text());
     if (!x || typeof x.jours !== 'object' || !('plan' in x)) throw new Error('fichier non reconnu');
     if (!confirm('Remplacer toutes les données de ce téléphone par ce fichier ?')) return;
-    etat = { plan: x.plan, jours: x.jours, cfg: x.cfg || { url: '' }, file: x.file || [] };
+    etat = { plan: x.plan, jours: x.jours, decisions: x.decisions || {}, cfg: x.cfg || { url: '' }, file: x.file || [] };
     sauver();
     alert('Import terminé.');
     afficher('reglages');
